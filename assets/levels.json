@@ -1,0 +1,14 @@
+[
+    {
+        "id": 0,
+        "name": "Wake Up",
+        "schema": [
+            {
+                "object_type": "static",
+                "position": [0, 0],
+                "size": [0, 0],
+                "trigger": null
+            }
+        ]
+    }
+]
