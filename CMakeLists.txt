@@ -6,6 +6,8 @@ set(CMAKE_C_STANDARD_REQUIRED TRUE)
 
 option(MYGAME_VENDORED "Use vendored libraries" OFF)
 
+set(CMAKE_FRAMEWORK_PATH /Library/Frameworks)
+
 if(MYGAME_VENDORED)
     add_subdirectory(vendored/sdl EXCLUDE_FROM_ALL)
 else()
