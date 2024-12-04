@@ -226,6 +226,29 @@ static void editor_ui() {
     toggle(global.window.width - 45, 5, 40, 10, 4, GREY, "bla", "open-editor-menu-toggle", open_menu_on_toggle, NULL);
 }
 
+void remove_active_body(void) {
+    if (active_body == (usize)-1) {
+        return;
+    }
+
+    usize removed_body_index = active_body;
+
+    physics_static_body_remove(active_body);
+    active_body = (usize)-1;
+
+    for (usize i = 0; i < list_tiled_static_bodies->len;) {
+        Tiled_Static_Body *body = array_list_get(list_tiled_static_bodies, i);
+        if (body->static_body == removed_body_index) {
+            array_list_remove(list_tiled_static_bodies, i);
+        } else {
+            if (body->static_body > removed_body_index) {
+                body->static_body -= 1;
+            }
+            i++;
+        }
+    }
+}
+
 void level_editor_render(void) {
     f32 mouseX_world = global.input.mouseX;
     f32 mouseY_world = global.input.mouseY;
@@ -353,25 +376,7 @@ void level_editor_render(void) {
     }
 
     if (global.input.backspace == KS_HELD && active_body != (usize)-1) {
-        usize removed_body_index = active_body;
-        bool has_removed = false;
-
-        physics_static_body_remove(active_body);
-        active_body = (usize)-1;
-
-        for (usize i = 0; i < list_tiled_static_bodies->len;) {
-            Tiled_Static_Body *body = array_list_get(list_tiled_static_bodies, i);
-            if (body->static_body == removed_body_index) {
-                array_list_remove(list_tiled_static_bodies, i);
-                has_removed = true;
-                continue;
-            } else {
-                if (has_removed && body->static_body > removed_body_index) {
-                    body->static_body -= 1;
-                }
-                i++;
-            }
-        }
+        remove_active_body();
     }
     if (global.input.mouseLeftClick && is_moving && active_body != (usize)-1) {
         // Update the position of the active body
