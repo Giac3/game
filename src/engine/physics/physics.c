@@ -371,18 +371,46 @@ Static_Body *physics_static_body_get(usize index) {
 };
 
 int physics_static_body_dump(const char* path) {
-    return io_file_write(state.static_body_list->items, state.static_body_list->item_size * state.static_body_list->len, path);
-};
+    size_t total_size = sizeof(Array_List) + state.static_body_list->capacity * state.static_body_list->item_size;
+    void *buffer = malloc(total_size);
+
+    // Copy the Array_List structure
+    memcpy(buffer, state.static_body_list, sizeof(Array_List));
+
+    // Set the items pointer to NULL or offset in the serialized structure
+    ((Array_List *)buffer)->items = NULL;
+
+    // Copy the items after the structure
+    memcpy((char *)buffer + sizeof(Array_List), state.static_body_list->items, state.static_body_list->capacity * state.static_body_list->item_size);
+
+    int result = io_file_write(buffer, total_size, path);
+
+    free(buffer);
+
+    return result;
+}
 
 void physics_static_body_load_from_bin(const char* path) {
-     File file = io_file_read(path);
+    File file = io_file_read(path);
 
     if (!file.is_valid) {
         ERROR_EXIT("Invalid file");
-    };
+    }
 
-    state.static_body_list = file.data;
-};
+    Array_List *list = malloc(sizeof(Array_List));
+    memcpy(list, file.data, sizeof(Array_List));
+
+    // Allocate memory for the items
+    list->items = malloc(list->capacity * list->item_size);
+
+    // Copy the items from the file data
+    memcpy(list->items, (char *)file.data + sizeof(Array_List), list->capacity * list->item_size);
+
+    state.static_body_list = list;
+
+    // Free the file data if necessary
+    // free(file.data);
+}
 
 u8 physics_static_body_remove(usize index) {
     return array_list_remove(state.static_body_list, index);

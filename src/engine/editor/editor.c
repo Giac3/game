@@ -102,12 +102,31 @@ void editor_init(void) {
     list_tiled_static_bodies = array_list_create(sizeof(Tiled_Static_Body), 8);
 }
 
-void save_level_item(void *buffer, const char* path) {
-    int saved = io_file_write(buffer, sizeof(buffer), path);
+void save_level_item(Array_List *list, const char* path) {
+    // Calculate total size: size of Array_List structure + size of items
+    size_t total_size = sizeof(Array_List) + list->capacity * list->item_size;
+
+    // Allocate buffer to hold the serialized data
+    void *buffer = malloc(total_size);
+
+    // Copy the Array_List structure (without the items pointer)
+    memcpy(buffer, list, sizeof(Array_List));
+
+    // Replace the items pointer with a relative offset or NULL
+    ((Array_List *)buffer)->items = NULL;
+
+    // Copy the items after the Array_List structure
+    memcpy((char *)buffer + sizeof(Array_List), list->items, list->capacity * list->item_size);
+
+    // Write the buffer to the file
+    int saved = io_file_write(buffer, total_size, path);
+
+    // Free the buffer
+    free(buffer);
 
     if (saved == 1) {
         ERROR_EXIT("Level save failed");
-    };
+    }
 }
 
 void load_level() {
@@ -117,9 +136,22 @@ void load_level() {
 
     if (!file.is_valid) {
         ERROR_EXIT("Invalid file");
-    };
+    }
 
-    list_tiled_static_bodies = file.data;
+    // Reconstruct the Array_List from the serialized data
+    Array_List *list = malloc(sizeof(Array_List));
+    memcpy(list, file.data, sizeof(Array_List));
+
+    // Allocate memory for the items
+    list->items = malloc(list->capacity * list->item_size);
+
+    // Copy the items from the file data
+    memcpy(list->items, (char *)file.data + sizeof(Array_List), list->capacity * list->item_size);
+
+    list_tiled_static_bodies = list;
+
+    // Free the file data if necessary
+    // free(file.data);
 }
 
 void render_tiled_static_body(Static_Body *static_body, Sprite_Sheet *sprite_sheet, int row, int col) {
