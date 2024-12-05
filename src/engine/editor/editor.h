@@ -3,6 +3,22 @@
 #include "../types.h"
 #include "../render/render.h"
 
+
+typedef struct editor_state {
+    f32 startingX;
+    f32 startingY;
+    bool is_creating;
+    bool is_moving;
+    bool is_resizing;
+    vec2 selected_sprite_coords;
+    usize active_body;
+    int sprite_sheet_grid_y_offset;
+    vec2 offset;
+    vec2 initial_size;
+    vec2 initial_position;
+    Array_List *list_tiled_static_bodies;
+} Editor_State;
+
 typedef struct tile_coordinates {
     int row;
     int column;
@@ -14,5 +30,5 @@ typedef struct tiled_static_body {
 } Tiled_Static_Body;
 
 void level_editor_render(void);
-void load_level();
+void load_level(void);
 void editor_init(void);

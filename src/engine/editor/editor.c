@@ -9,30 +9,22 @@
 #include "../io/io.h"
 #include <stdbool.h>
 
-static f32 startingX;
-static f32 startingY;
 
-static bool is_creating = false;
-static bool is_moving = false;
-static bool is_resizing = false;
+static Editor_State editor_state;
 
-int selected_col = 0;
-int selected_row = 0;
+void editor_init(void) {
+    editor_state.list_tiled_static_bodies = array_list_create(sizeof(Tiled_Static_Body), 8);
+    editor_state.selected_sprite_coords[0] = 0;
+    editor_state.selected_sprite_coords[1] = 0;
+    editor_state.sprite_sheet_grid_y_offset = 0;
+    editor_state.active_body = (usize)-1;
 
-static usize active_body = (usize)-1;
-
-int sprite_sheet_grid_y_offset = 0;
-
-static vec2 offset;
-static vec2 initial_size;
-static vec2 initial_position;
-
-static Array_List *list_tiled_static_bodies;
+}
 
 void select_sprite(AABB *aabb, void *user_data) {
     if (user_data != NULL) {
-        selected_col = ((Tile_Coordinates*)user_data)->column;
-        selected_row = ((Tile_Coordinates*)user_data)->row;
+        editor_state.selected_sprite_coords[0] = ((Tile_Coordinates*)user_data)->column;
+        editor_state.selected_sprite_coords[1] = ((Tile_Coordinates*)user_data)->row;
         free(user_data);
     }
 }
@@ -49,7 +41,7 @@ void render_sprite_sheet_grid(Sprite_Sheet *sprite_sheet, vec2 start_position, f
 
         // Position sprites in a single column
         float x = start_position[0];
-        float y = start_position[1] - frame_index * (sprite_sheet->cell_height + spacing) + sprite_sheet_grid_y_offset;
+        float y = start_position[1] - frame_index * (sprite_sheet->cell_height + spacing) + editor_state.sprite_sheet_grid_y_offset;
 
         vec2 position = { x, y };
 
@@ -65,7 +57,7 @@ void render_sprite_sheet_grid(Sprite_Sheet *sprite_sheet, vec2 start_position, f
         float button_x = x + sprite_sheet->cell_width + spacing;
         float button_y = y; // Same y-coordinate as the sprite
 
-        if (selected_row == row && selected_col == column) {
+        if (editor_state.selected_sprite_coords[1] == row && editor_state.selected_sprite_coords[0] == column) {
             button(
             button_x,
             button_y,
@@ -98,9 +90,7 @@ void render_sprite_sheet_grid(Sprite_Sheet *sprite_sheet, vec2 start_position, f
     }
 }
 
-void editor_init(void) {
-    list_tiled_static_bodies = array_list_create(sizeof(Tiled_Static_Body), 8);
-}
+
 
 void save_level_item(Array_List *list, const char* path) {
     // Calculate total size: size of Array_List structure + size of items
@@ -148,7 +138,7 @@ void load_level() {
     // Copy the items from the file data
     memcpy(list->items, (char *)file.data + sizeof(Array_List), list->capacity * list->item_size);
 
-    list_tiled_static_bodies = list;
+    editor_state.list_tiled_static_bodies = list;
 
     // Free the file data if necessary
     // free(file.data);
@@ -216,10 +206,10 @@ void compute_resized_aabb(vec2 initial_position, vec2 initial_size, vec2 startin
 }
 
 void scroll_up_sprite_grid(AABB *aabb, void *user_data) {
-    sprite_sheet_grid_y_offset -= 10;
+    editor_state.sprite_sheet_grid_y_offset -= 10;
 }
 void scroll_down_sprite_grid(AABB *aabb, void *user_data) {
-    sprite_sheet_grid_y_offset += 10;
+    editor_state.sprite_sheet_grid_y_offset += 10;
 }
 
 void open_menu_on_toggle(AABB *aabb, void *user_data) {
@@ -244,7 +234,7 @@ void open_menu_on_toggle(AABB *aabb, void *user_data) {
 }
 
 void save_level_button(AABB *aabb, void *user_data) {
-    save_level_item(list_tiled_static_bodies, "./tiled-static-bodies.bin");
+    save_level_item(editor_state.list_tiled_static_bodies, "./tiled-static-bodies.bin");
     physics_static_body_dump("./static-bodies.bin");
 }
 
@@ -259,19 +249,19 @@ static void editor_ui() {
 }
 
 void remove_active_body(void) {
-    if (active_body == (usize)-1) {
+    if (editor_state.active_body == (usize)-1) {
         return;
     }
 
-    usize removed_body_index = active_body;
+    usize removed_body_index = editor_state.active_body;
 
-    physics_static_body_remove(active_body);
-    active_body = (usize)-1;
+    physics_static_body_remove(editor_state.active_body);
+    editor_state.active_body = (usize)-1;
 
-    for (usize i = 0; i < list_tiled_static_bodies->len;) {
-        Tiled_Static_Body *body = array_list_get(list_tiled_static_bodies, i);
+    for (usize i = 0; i < editor_state.list_tiled_static_bodies->len;) {
+        Tiled_Static_Body *body = array_list_get(editor_state.list_tiled_static_bodies, i);
         if (body->static_body == removed_body_index) {
-            array_list_remove(list_tiled_static_bodies, i);
+            array_list_remove(editor_state.list_tiled_static_bodies, i);
         } else {
             if (body->static_body > removed_body_index) {
                 body->static_body -= 1;
@@ -289,7 +279,7 @@ void level_editor_render(void) {
 
 
     if (global.input.mouseRightClick) {
-        if (!is_creating && !is_resizing) {
+        if (!editor_state.is_creating && !editor_state.is_resizing) {
             for (usize i = 0; i < physics_static_body_count(); ++i) {
                 Static_Body *static_body = physics_static_body_get(i);
 
@@ -305,55 +295,55 @@ void level_editor_render(void) {
                 };
 
                 if (physics_point_intersect_aabb(mousePos_world, handle_aabb)) {
-                    active_body = i;
-                    is_resizing = true;
+                    editor_state.active_body = i;
+                    editor_state.is_resizing = true;
 
-                    startingX = mouseX_world;
-                    startingY = mouseY_world;
+                    editor_state.startingX = mouseX_world;
+                    editor_state.startingY = mouseY_world;
 
-                    initial_size[0] = static_body->aabb.half_size[0] * 2.0f;
-                    initial_size[1] = static_body->aabb.half_size[1] * 2.0f;
+                    editor_state.initial_size[0] = static_body->aabb.half_size[0] * 2.0f;
+                    editor_state.initial_size[1] = static_body->aabb.half_size[1] * 2.0f;
 
-                    initial_position[0] = static_body->aabb.position[0];
-                    initial_position[1] = static_body->aabb.position[1];
+                    editor_state.initial_position[0] = static_body->aabb.position[0];
+                    editor_state.initial_position[1] = static_body->aabb.position[1];
 
                     break;
                 }
             }
 
             // If not resizing, start creating a new body as before
-            if (!is_resizing) {
+            if (!editor_state.is_resizing) {
                 
-                is_creating = true;
-                startingX = mouseX_world;
-                startingY = mouseY_world;
+                editor_state.is_creating = true;
+                editor_state.startingX = mouseX_world;
+                editor_state.startingY = mouseY_world;
                 vec2 size = {0, 0};
-                vec2 position = {startingX, startingY};
-                active_body = physics_static_body_create(position, size, COLLISION_LAYER_TERRAIN);
-                array_list_append(list_tiled_static_bodies, &(Tiled_Static_Body){
+                vec2 position = {editor_state.startingX, editor_state.startingY};
+                editor_state.active_body = physics_static_body_create(position, size, COLLISION_LAYER_TERRAIN);
+                array_list_append(editor_state.list_tiled_static_bodies, &(Tiled_Static_Body){
                     .tile_coordinates = {
-                        .column = selected_col,
-                        .row = selected_row,
+                        .column = editor_state.selected_sprite_coords[0],
+                        .row = editor_state.selected_sprite_coords[1],
                     },
-                    .static_body = active_body
+                    .static_body = editor_state.active_body
                 });
             }
         }
     }
 
     // Resizing a new body during creation
-    if (global.input.mouseRightClick && is_creating && active_body != (usize)-1) {
+    if (global.input.mouseRightClick && editor_state.is_creating && editor_state.active_body != (usize)-1) {
         vec2 new_position;
         vec2 new_half_size;
 
         vec2 initial_size = {0, 0};
-        vec2 initial_position = {startingX, startingY};
-        vec2 starting_mouse_pos = {startingX, startingY};
+        vec2 initial_position = {editor_state.startingX, editor_state.startingY};
+        vec2 starting_mouse_pos = {editor_state.startingX, editor_state.startingY};
         vec2 current_mouse_pos = {mouseX_world, mouseY_world};
 
         compute_resized_aabb(initial_position, initial_size, starting_mouse_pos, current_mouse_pos, &new_position, &new_half_size);
 
-        Static_Body *static_body = physics_static_body_get(active_body);
+        Static_Body *static_body = physics_static_body_get(editor_state.active_body);
         static_body->aabb.position[0] = new_position[0];
         static_body->aabb.position[1] = new_position[1];
         static_body->aabb.half_size[0] = new_half_size[0];
@@ -361,16 +351,16 @@ void level_editor_render(void) {
     }
 
     // Resizing an existing body
-    if (global.input.mouseRightClick && is_resizing && active_body != (usize)-1) {
+    if (global.input.mouseRightClick && editor_state.is_resizing && editor_state.active_body != (usize)-1) {
         vec2 new_position;
         vec2 new_half_size;
 
-        vec2 starting_mouse_pos = {startingX, startingY};
+        vec2 starting_mouse_pos = {editor_state.startingX, editor_state.startingY};
         vec2 current_mouse_pos = {mouseX_world, mouseY_world};
 
-        compute_resized_aabb(initial_position, initial_size, starting_mouse_pos, current_mouse_pos, &new_position, &new_half_size);
+        compute_resized_aabb(editor_state.initial_position, editor_state.initial_size, starting_mouse_pos, current_mouse_pos, &new_position, &new_half_size);
 
-        Static_Body *static_body = physics_static_body_get(active_body);
+        Static_Body *static_body = physics_static_body_get(editor_state.active_body);
         static_body->aabb.position[0] = new_position[0];
         static_body->aabb.position[1] = new_position[1];
         static_body->aabb.half_size[0] = new_half_size[0];
@@ -378,66 +368,66 @@ void level_editor_render(void) {
     }
 
     // Exit creation or resize mode on mouse release
-    if (!global.input.mouseRightClick && is_creating && active_body != (usize)-1) {
-        is_creating = false;
-        // active_body = (usize)-1;
+    if (!global.input.mouseRightClick && editor_state.is_creating && editor_state.active_body != (usize)-1) {
+       editor_state.is_creating = false;
+        // editor_state.active_body = (usize)-1;
     }
 
-    if (!global.input.mouseRightClick && is_resizing && active_body != (usize)-1) {
-        is_resizing = false;
-        // active_body = (usize)-1;
+    if (!global.input.mouseRightClick && editor_state.is_resizing && editor_state.active_body != (usize)-1) {
+        editor_state.is_resizing = false;
+        // editor_state.active_body = (usize)-1;
     }
 
     // Select and move static bodies
-    if (global.input.mouseLeftClick && !is_moving) {
+    if (global.input.mouseLeftClick && !editor_state.is_moving) {
         for (usize i = 0; i < physics_static_body_count(); ++i) {
             Static_Body *static_body = physics_static_body_get(i);
 
             if (physics_point_intersect_aabb(mousePos_world, static_body->aabb)) {
                 
-                active_body = i;
-                is_moving = true;
+                editor_state.active_body = i;
+                editor_state.is_moving = true;
 
-                offset[0] = static_body->aabb.position[0] - mouseX_world;
-                offset[1] = static_body->aabb.position[1] - mouseY_world;
+                editor_state.offset[0] = static_body->aabb.position[0] - mouseX_world;
+                editor_state.offset[1] = static_body->aabb.position[1] - mouseY_world;
                 break;
             } else {
-                active_body = (usize)-1;
+                editor_state.active_body = (usize)-1;
             }
         }
     }
 
-    if (global.input.backspace == KS_HELD && active_body != (usize)-1) {
+    if (global.input.backspace == KS_HELD && editor_state.active_body != (usize)-1) {
         remove_active_body();
     }
-    if (global.input.mouseLeftClick && is_moving && active_body != (usize)-1) {
+    if (global.input.mouseLeftClick && editor_state.is_moving && editor_state.active_body != (usize)-1) {
         // Update the position of the active body
-        Static_Body *static_body = physics_static_body_get(active_body);
-        static_body->aabb.position[0] = mouseX_world + offset[0];
-        static_body->aabb.position[1] = mouseY_world + offset[1];
+        Static_Body *static_body = physics_static_body_get(editor_state.active_body);
+        static_body->aabb.position[0] = mouseX_world + editor_state.offset[0];
+        static_body->aabb.position[1] = mouseY_world + editor_state.offset[1];
     }
 
-    if (!global.input.mouseLeftClick && is_moving && active_body != (usize)-1) {
-        is_moving = false;
-        // active_body = (usize)-1;
+    if (!global.input.mouseLeftClick && editor_state.is_moving && editor_state.active_body != (usize)-1) {
+        editor_state.is_moving = false;
+        // editor_state.active_body = (usize)-1;
     }
 
-    for (u32 i = 0; i < list_tiled_static_bodies->len; ++i) {
+    for (u32 i = 0; i < editor_state.list_tiled_static_bodies->len; ++i) {
         Static_Body *static_body = physics_static_body_get(i);
         // Render static bodies with appropriate color or texture
 
-        if (i == active_body) {
-            if (is_creating) {
+        if (i == editor_state.active_body) {
+            if (editor_state.is_creating) {
             // While creating, render the AABB with a color
                 append_standard_quad((f32 *)static_body, RED);
-            }  else if (is_resizing) {
+            }  else if (editor_state.is_resizing) {
                 append_standard_quad((f32 *)static_body, BLUE);
             } else {
                 append_standard_quad((f32 *)static_body, GREEN);
             }
         }         
     
-    Tiled_Static_Body *tiled_static_body = array_list_get(list_tiled_static_bodies, i);
+    Tiled_Static_Body *tiled_static_body = array_list_get(editor_state.list_tiled_static_bodies, i);
     render_tiled_static_body(static_body, &global.sprite_sheet_tileset, tiled_static_body->tile_coordinates.row, tiled_static_body->tile_coordinates.column);
 
     // Render the resize handle
