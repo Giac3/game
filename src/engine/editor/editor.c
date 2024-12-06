@@ -18,6 +18,7 @@ void editor_init(void) {
     editor_state.selected_sprite_coords[1] = 0;
     editor_state.sprite_sheet_grid_y_offset = 0;
     editor_state.active_body = (usize)-1;
+    editor_state.action = IDLE;
 
 }
 
@@ -279,7 +280,7 @@ void level_editor_render(void) {
 
 
     if (global.input.mouseRightClick) {
-        if (!editor_state.is_creating && !editor_state.is_resizing) {
+        if ((editor_state.action != CREATING) && (editor_state.action != RESIZING)) {
             for (usize i = 0; i < physics_static_body_count(); ++i) {
                 Static_Body *static_body = physics_static_body_get(i);
 
@@ -296,7 +297,7 @@ void level_editor_render(void) {
 
                 if (physics_point_intersect_aabb(mousePos_world, handle_aabb)) {
                     editor_state.active_body = i;
-                    editor_state.is_resizing = true;
+                    editor_state.action = RESIZING;
 
                     editor_state.startingX = mouseX_world;
                     editor_state.startingY = mouseY_world;
@@ -312,9 +313,8 @@ void level_editor_render(void) {
             }
 
             // If not resizing, start creating a new body as before
-            if (!editor_state.is_resizing) {
-                
-                editor_state.is_creating = true;
+            if (editor_state.action != RESIZING) {
+                editor_state.action = CREATING;
                 editor_state.startingX = mouseX_world;
                 editor_state.startingY = mouseY_world;
                 vec2 size = {0, 0};
@@ -332,7 +332,7 @@ void level_editor_render(void) {
     }
 
     // Resizing a new body during creation
-    if (global.input.mouseRightClick && editor_state.is_creating && editor_state.active_body != (usize)-1) {
+    if (global.input.mouseRightClick && editor_state.action == CREATING && editor_state.active_body != (usize)-1) {
         vec2 new_position;
         vec2 new_half_size;
 
@@ -351,7 +351,7 @@ void level_editor_render(void) {
     }
 
     // Resizing an existing body
-    if (global.input.mouseRightClick && editor_state.is_resizing && editor_state.active_body != (usize)-1) {
+    if (global.input.mouseRightClick && editor_state.action == RESIZING && editor_state.active_body != (usize)-1) {
         vec2 new_position;
         vec2 new_half_size;
 
@@ -368,25 +368,25 @@ void level_editor_render(void) {
     }
 
     // Exit creation or resize mode on mouse release
-    if (!global.input.mouseRightClick && editor_state.is_creating && editor_state.active_body != (usize)-1) {
-       editor_state.is_creating = false;
+    if (!global.input.mouseRightClick && editor_state.action == CREATING && editor_state.active_body != (usize)-1) {
+       editor_state.action = IDLE;
         // editor_state.active_body = (usize)-1;
     }
 
-    if (!global.input.mouseRightClick && editor_state.is_resizing && editor_state.active_body != (usize)-1) {
-        editor_state.is_resizing = false;
+    if (!global.input.mouseRightClick && editor_state.action == RESIZING && editor_state.active_body != (usize)-1) {
+        editor_state.action = IDLE;
         // editor_state.active_body = (usize)-1;
     }
 
     // Select and move static bodies
-    if (global.input.mouseLeftClick && !editor_state.is_moving) {
+    if (global.input.mouseLeftClick && editor_state.action != MOVING) {
         for (usize i = 0; i < physics_static_body_count(); ++i) {
             Static_Body *static_body = physics_static_body_get(i);
 
             if (physics_point_intersect_aabb(mousePos_world, static_body->aabb)) {
                 
                 editor_state.active_body = i;
-                editor_state.is_moving = true;
+                editor_state.action = MOVING;
 
                 editor_state.offset[0] = static_body->aabb.position[0] - mouseX_world;
                 editor_state.offset[1] = static_body->aabb.position[1] - mouseY_world;
@@ -400,15 +400,15 @@ void level_editor_render(void) {
     if (global.input.backspace == KS_HELD && editor_state.active_body != (usize)-1) {
         remove_active_body();
     }
-    if (global.input.mouseLeftClick && editor_state.is_moving && editor_state.active_body != (usize)-1) {
+    if (global.input.mouseLeftClick && editor_state.action == MOVING && editor_state.active_body != (usize)-1) {
         // Update the position of the active body
         Static_Body *static_body = physics_static_body_get(editor_state.active_body);
         static_body->aabb.position[0] = mouseX_world + editor_state.offset[0];
         static_body->aabb.position[1] = mouseY_world + editor_state.offset[1];
     }
 
-    if (!global.input.mouseLeftClick && editor_state.is_moving && editor_state.active_body != (usize)-1) {
-        editor_state.is_moving = false;
+    if (!global.input.mouseLeftClick && editor_state.action == MOVING && editor_state.active_body != (usize)-1) {
+        editor_state.action = IDLE;
         // editor_state.active_body = (usize)-1;
     }
 
@@ -417,10 +417,10 @@ void level_editor_render(void) {
         // Render static bodies with appropriate color or texture
 
         if (i == editor_state.active_body) {
-            if (editor_state.is_creating) {
+            if (editor_state.action == CREATING) {
             // While creating, render the AABB with a color
                 append_standard_quad((f32 *)static_body, RED);
-            }  else if (editor_state.is_resizing) {
+            }  else if (editor_state.action == RESIZING) {
                 append_standard_quad((f32 *)static_body, BLUE);
             } else {
                 append_standard_quad((f32 *)static_body, GREEN);

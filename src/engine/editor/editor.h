@@ -4,12 +4,18 @@
 #include "../render/render.h"
 
 
+typedef enum editor_action {
+    CREATING,
+    RESIZING,
+    MOVING,
+    IDLE,
+} Editor_Action;
+
+
 typedef struct editor_state {
     f32 startingX;
     f32 startingY;
-    bool is_creating;
-    bool is_moving;
-    bool is_resizing;
+    Editor_Action action;
     vec2 selected_sprite_coords;
     usize active_body;
     int sprite_sheet_grid_y_offset;
